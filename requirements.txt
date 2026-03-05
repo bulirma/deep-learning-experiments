@@ -1,0 +1,5 @@
+pygame-ce
+torch
+torchmetrics
+torchvision
+tqdm

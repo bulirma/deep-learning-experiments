@@ -1,0 +1,12 @@
+__pycache__/
+models/
+venv/
+proj/
+emnist/
+
+Makefile
+exec.pbs
+upload_list.txt
+proj.zip
+download_ds.py
+test.py
