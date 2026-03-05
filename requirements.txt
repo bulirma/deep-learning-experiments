@@ -1,3 +1,4 @@
+matplotlib
 pygame-ce
 torch
 torchmetrics
