@@ -12,14 +12,14 @@ class Canvas:
         (0, 0): 0
     }
     _small_stroke = {
-        (-1, -1): 127,
-        (-1, 1): 127,
-        (1, -1): 127,
-        (1, 1): 127,
-        (-1, 0): 64,
-        (0, -1): 64,
-        (0, 1): 64,
-        (1, 0): 64,
+        (-1, -1): 63,
+        (-1, 1): 63,
+        (1, -1): 63,
+        (1, 1): 63,
+        (-1, 0): 31,
+        (0, -1): 31,
+        (0, 1): 31,
+        (1, 0): 31,
         (0, 0): 0
     }
 
@@ -66,7 +66,7 @@ class Canvas:
         self._apply_stroke(xi, yi)
 
     def clear(self):
-        self.image = torch.ones((self.sc, self.sc), dtype=torch.int8) * 255
+        self.image = torch.ones((self.sc, self.sc), dtype=torch.uint8) * 255
 
 
 def main():
@@ -79,7 +79,6 @@ def main():
     with lzma.open('models/no_augment.model', 'rb') as mf:
         model_record = pickle.load(mf)
     model = model_record['model']
-    #print('accuracy', 
 
     running = True
     while running:
@@ -96,12 +95,11 @@ def main():
                 if key == 'c':
                     canvas.clear()
                 elif key == 'p':
-                    image = (255 - canvas.image)
+                    image = (255 - canvas.image).T
                     image = image.float() / 255.0
                     image = (image - 0.1307) / 0.3081
                     image = image.unsqueeze(0).unsqueeze(0)
-                    pred = model.predict(image)
-                    print(pred)
+                    print(model.predict(image))
 
         left_pressed = pygame.mouse.get_pressed()[0]
         pos = pygame.mouse.get_pos()

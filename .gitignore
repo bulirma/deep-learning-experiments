@@ -2,8 +2,3 @@ __pycache__/
 models/
 venv/
 emnist/
-
-Makefile
-*.pbs
-upload_list.txt
-download_ds.py

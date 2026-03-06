@@ -124,13 +124,13 @@ class Model(nn.Module):
             targets = targets.to(self.device)
 
             predictions = self(images)
-            loss = self.test_loss(predictions, targets)
+            loss = self.loss(predictions, targets)
             
             self.test_accuracy.update(predictions, targets)
             self.test_loss.update(loss)
 
         return {
-            'accuracy': self.test_accuracy.compute().item(),
+            'acc': self.test_accuracy.compute().item(),
             'loss': self.test_loss.compute().item()
         }
 

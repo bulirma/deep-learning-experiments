@@ -66,14 +66,7 @@ def get_emnist_loaders(root: str, split:str, batch_size: int, valid_size: int, s
 
 def main(args: argparse.Namespace):
     emnist_dir = args.dssrc
-
     batch_size = 100
-    learning_rate = 0.001
-    weight_decay = 1e-4
-    epochs = 15
-    model_name = None
-
-    #model = models.setup_byclass_cnn_model(62, learning_rate, weight_decay, args.validation_set_size > 0)
 
     if args.augment:
         mean, std = get_emnist_train_data_statistics(emnist_dir, args.dataset)
@@ -102,12 +95,20 @@ def main(args: argparse.Namespace):
     train_loader, test_loader, validation_loader = loaders
 
     steps_per_epoch = len(train_loader)
-    model = models.setup_mnist_cnn_model(10, learning_rate, weight_decay, epochs, steps_per_epoch)
+    learning_rate = 0.001
+    weight_decay = 1e-4
+    epochs = 15
+    model_name = None
+
+    if args.dataset == 'byclass':
+        model = models.setup_byclass_cnn_model(62, learning_rate, weight_decay, args.validation_set_size > 0)
+    elif args.dataset == 'mnist':
+        model = models.setup_mnist_cnn_model(10, learning_rate, weight_decay, epochs, steps_per_epoch)
+    else:
+        raise 'dataset not implemented'
     
     logs = model.fit(epochs, train_loader, validation_loader)
     result = model.evaluate(test_loader)
-    print('test acc:', result['acc'])
-    print('test loss:', result['loss'])
 
     model_dir = os.path.join(os.path.dirname(__file__), args.model_dir)
     os.makedirs(model_dir, exist_ok=True)

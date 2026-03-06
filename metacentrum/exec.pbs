@@ -1,0 +1,24 @@
+#!/bin/bash
+
+#PBS -N EMNIST_traineval
+#PBS -l select=1:ncpus=1:mem=16gb:scratch_local=50mb:ngpus=1:gpu_cap=cuda60:cuda_version=11.0
+#PBS -l walltime=2:30:00
+#PBS -o stdout.txt
+#PBS -e stderr.txt
+#PBS -m ae
+#PBS -V
+
+DATADIR="___currentdir___"
+
+cp "$DATADIR/traineval.py" "$SCRATCHDIR"
+cp "$DATADIR/models.py" "$SCRATCHDIR"
+
+cd "$SCRATCHDIR"
+
+. "$DATADIR/venv/bin/activate"
+python traineval.py --dssrc "$DATADIR/emnist"
+deactivate
+
+cp -r "$SCRATCHDIR/models" "$DATADIR"
+
+clean_scratch

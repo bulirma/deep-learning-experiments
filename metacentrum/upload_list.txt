@@ -1,0 +1,8 @@
+metacentrum/requirements.txt
+metacentrum/download_ds.py
+metacentrum/exec.pbs
+metacentrum/prepare.sh
+metacentrum/install_requirements.sh
+metacentrum/download_dataset.sh
+models.py
+traineval.py
