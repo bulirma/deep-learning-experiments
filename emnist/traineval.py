@@ -117,12 +117,11 @@ def main(args: argparse.Namespace):
     model_fn = os.path.join(model_dir, f'{name}{args.dataset}_{time}.model')
 
     model_record = {
-        'model': model,
+        'model_state_dict': model.state_dict(),
         'train_logs': logs,
         'evaluation': result
     }
-    with lzma.open(model_fn, 'wb') as mf:
-        pickle.dump(model_record, mf)
+    torch.save(model_record, model_fn)
 
 
 if __name__ == '__main__':

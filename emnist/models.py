@@ -26,10 +26,10 @@ class Model(nn.Module):
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.loss = loss
-        self.test_accuracy = metrics.get('accuracy')
-        self.test_loss = metrics.get('loss')
-        self.validation_accuracy = metrics.get('validation_accuracy')
-        self.validation_loss = metrics.get('validation_loss')
+        self.test_accuracy = metrics.get('accuracy').to(self.device)
+        self.test_loss = metrics.get('loss').to(self.device)
+        self.validation_accuracy = metrics.get('validation_accuracy').to(self.device)
+        self.validation_loss = metrics.get('validation_loss').to(self.device)
         if self.use_validation and self.validation_accuracy is None:
             raise ValueError('model is set to use validation but no validation accuracy metric was provided')
         if self.use_validation and self.validation_loss is None:

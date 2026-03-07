@@ -1,10 +1,15 @@
-import lzma
-import pickle
+import random
+import sys
 
+from matplotlib import pyplot as plt
 import pygame
 import torch
+from torchvision.datasets import EMNIST
+import torchvision.transforms.v2 as transforms
 
+import models
 from models import Model
+from traineval import DEVICE
 
 
 class Canvas:
@@ -22,6 +27,17 @@ class Canvas:
         (1, 0): 31,
         (0, 0): 0
     }
+    _erase_stroke = {
+        (-1, -1): 255,
+        (-1, 1): 255,
+        (1, -1): 255,
+        (1, 1): 255,
+        (-1, 0): 255,
+        (0, -1): 255,
+        (0, 1): 255,
+        (1, 0): 255,
+        (0, 0): 255
+    }
 
     def __init__(self, screen, x, y, c):
         self.screen = screen
@@ -32,6 +48,7 @@ class Canvas:
         self.s = self.sc * c
         self.c = self.s // self.sc
         self._stroke = self._small_stroke
+        self._eraser = False
         self.clear()
 
     def render(self):
@@ -57,7 +74,10 @@ class Canvas:
             rxi, ryi = oxi + xi, oyi + yi
             if rxi < 0 or ryi < 0 or rxi >= self.sc or ryi >= self.sc:
                 continue
-            self.image[rxi, ryi] &= c
+            if self._eraser:
+                self.image[rxi, ryi] |= c
+            else:
+                self.image[rxi, ryi] &= c
 
     def draw(self, ax, ay):
         x, y = ax - self.x, ay - self.y
@@ -68,6 +88,18 @@ class Canvas:
     def clear(self):
         self.image = torch.ones((self.sc, self.sc), dtype=torch.uint8) * 255
 
+    def set_point_stroke(self):
+        self._eraser = False
+        self._stroke = self._point_stroke
+
+    def set_small_stroke(self):
+        self._eraser = False
+        self._stroke = self._small_stroke
+
+    def set_erase_stroke(self):
+        self._eraser = True
+        self._stroke = self._erase_stroke
+
 
 def main():
     pygame.init()
@@ -76,9 +108,11 @@ def main():
     clock = pygame.time.Clock()
 
     canvas = Canvas(screen, 8, 8, 16)
-    with lzma.open('models/no_augment.model', 'rb') as mf:
-        model_record = pickle.load(mf)
-    model = model_record['model']
+    model_record = torch.load('models/byclass_07200326.model', map_location=torch.device(DEVICE))
+    model_state = model_record['model_state_dict']
+    model = models.setup_byclass_cnn_model(62, 0.001, 1e-4, False)
+    model.load_state_dict(model_state)
+    classes = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabdefghijklmnopqrstuvwxyz'
 
     running = True
     while running:
@@ -95,11 +129,17 @@ def main():
                 if key == 'c':
                     canvas.clear()
                 elif key == 'p':
-                    image = (255 - canvas.image).T
+                    image = (255 - canvas.image)
                     image = image.float() / 255.0
                     image = (image - 0.1307) / 0.3081
                     image = image.unsqueeze(0).unsqueeze(0)
-                    print(model.predict(image))
+                    print(classes[model.predict(image)])
+                elif key == '1':
+                    canvas.set_point_stroke()
+                elif key == '2':
+                    canvas.set_small_stroke()
+                elif key == '3':
+                    canvas.set_erase_stroke()
 
         left_pressed = pygame.mouse.get_pressed()[0]
         pos = pygame.mouse.get_pos()
@@ -110,6 +150,36 @@ def main():
 
     pygame.quit()
 
+def show_dataset(c: int = None):
+    transform = transforms.Compose((
+        transforms.ToImage(),
+    ))
+    train_raw = EMNIST(root='emnist', split='byclass', train=True, download=True, transform=transform)
+
+    if c is None:
+        class_indices = torch.arange(train_raw.data.size(0))
+    else:
+        class_indices = (train_raw.targets == c).nonzero().squeeze()
+
+    fig, axes = plt.subplots(3, 4, figsize=(12, 9))
+    axes = axes.flatten()
+
+    for i, ax in enumerate(axes):
+        i = random.choice(class_indices)
+        image = train_raw.data[i]
+        target = train_raw.targets[i]
+
+        ax.imshow(image.T, cmap='gray')
+        ax.set_title(f'label: {target.item()}')
+
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    plt.tight_layout()
+    plt.show()
+
 
 if __name__ == '__main__':
     main()
+    #show_dataset()
+    #show_dataset(int(sys.argv[1]))
