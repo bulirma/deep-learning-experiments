@@ -10,6 +10,53 @@ from typing import Iterable
 from traineval import DEVICE
 
 
+def ctc_greedy_decode(logits, blank=2):
+    predictions = logits.argmax(dim=2)
+    T, B = predictions.shape
+    decoded = []
+    for b in range(B):
+        prev = blank
+        seq = []
+        for t in range(T):
+            p = int(predictions[t, b].item())
+            if p != prev and p != blank:
+                seq.append(p)
+            prev = p
+        decoded.append(seq)
+    return decoded
+
+def pad_batch_images(imgs, pad_value=0):
+    def pad(img, w, h):
+        nonlocal pad_value
+        r = w - img.size(0)
+        b = h - img.size(1)
+        return F.pad(img, (0, r, 0, b), mode='constant', value=pad_value)
+
+    max_w = max(map(lambda img: img.size(0) * img.size(2), imgs))
+    max_h = max(map(lambda img: img.size(1), imgs))
+    return torch.stack([pad(img, max_w, max_h) for img in imgs])
+
+
+def collate(batch):
+    imgs = [b[0] for b in batch]
+    targets = [b[1] for b in batch]
+    lengths = [b[2] for b in batch]
+    images_padded = pad_batch_images(imgs, pad_value=0)
+    targets = torch.stack(targets).long()
+    lenghts = torch.stack(lengths).long()
+    return images_padded, targets, lenghts
+
+#def levenshtein(a, b):
+#    m, n = len(a), len(b)
+#    dp = list(range(n+1))
+#    for i in range(1, m + 1):
+#        prev, dp[0] = dp[0], i
+#        for j in range(1, n + 1):
+#            cur = min(dp[j] + 1, dp[j - 1] + 1, prev + (0 if a[i - 1] == b[j - 1] else 1))
+#            prev, dp[j] = dp[j], cur
+#    return dp[n]
+
+
 class CTCModel(nn.Module):
     def __init__(self, device, num_classes, backbone, rnn_in_dim, rnn_hidden, rnn_layers):
         super().__init__()
@@ -95,7 +142,7 @@ class CTCModel(nn.Module):
 
 
 def crnn_ctc_model(learning_rate: float, weight_decay: float):
-    backbone = torch.nn.Sequential((
+    backbone = nn.ModuleList((
         nn.Conv2d(1, 64, 3, 1, 1),
         nn.ReLU(),
         nn.BatchNorm2d(32),
@@ -105,7 +152,7 @@ def crnn_ctc_model(learning_rate: float, weight_decay: float):
         nn.MaxPool2d(2, 2),
         nn.Conv2d(128, 256, 3, 1, 1),
     ))
-    model = CTCModel(DEVICE, 3, backbone, 256, 2)
+    model = CTCModel(DEVICE, 3, backbone, 256, 256, 2)
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=150, eta_min=0)
     model.configure(
@@ -117,19 +164,3 @@ def crnn_ctc_model(learning_rate: float, weight_decay: float):
         }
     )
     return torch.compile(model)
-
-def ctc_greedy_decode(logits, blank=2):
-    predictions = logits.argmax(dim=2)
-    T, B = predictions.shape
-    decoded = []
-    for b in range(B):
-        prev = blank
-        seq = []
-        for t in range(T):
-            p = int(predictions[t, b].item())
-            if p != prev and p != blank:
-                seq.append(p)
-            prev = p
-        decoded.append(seq)
-    return decoded
-
