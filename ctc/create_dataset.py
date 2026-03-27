@@ -1,115 +1,125 @@
 from matplotlib import pyplot as plt
 import numpy as np
-import random
-from skimage.morphology import closing, footprint_rectangle, opening, disk, erosion
+from skimage.morphology import closing, footprint_rectangle
+from tqdm import tqdm
+
+import lzma
+import pickle
 
 
 def draw(img: np.array):
-    plt.imshow(img)
+    plt.imshow(img, cmap='gray')
     plt.axis('off')
     plt.show()
 
-def threshold(img: np.array, t: int) -> np.array:
-    add = (255 - img) / 3
-    img = np.where(img > t, img + add, 0)
-    return img
+def gen_dot(
+    img_shape: tuple,
+    center_x_range: tuple = (0.2, 0.8),
+    center_y_range: tuple = (0.2, 0.8),
+    radius_range: tuple = (5, 15),
+    irregularity: float = 0.15,
+    num_blobs: int = 1,
+    seed: int = None
+) -> np.array:
+    if seed is not None:
+        np.random.seed(seed)
 
-def threshold_del(img: np.array, t: int) -> np.array:
-    cond_range_add = (255 - t) / 4
-    min_val = np.where(img != 0, img, 255).min()
-    cond = np.logical_and(img != 0, img <= min_val + cond_range_add)
-    rnd = np.random.random(size=img.shape)
-    cond = np.logical_and(cond, rnd > 0.5)
-    select = np.where(cond, img, 0)
-    img = np.where(img > min_val + cond_range_add, img, select)
-    return img
-
-def morph(img: np.array) -> np.array:
-    img = closing(img, footprint_rectangle((3, 3)))
-    img = opening(img, disk(2))
-    return img
-
-def gen_dot(img_shape: tuple, shift: tuple = (0, 0), t: int = 180) -> np.array:
-    min_val = 0
-    max_val = 255
-    half = (max_val - min_val) / 2
-    step_x = (max_val - min_val) / img_shape[0]
-    shift_x = shift[0] * step_x
-    step_y = (max_val - min_val) / img_shape[1]
-    shift_y = shift[1] * step_y
-    x = np.linspace(min_val - shift_x, max_val - shift_x, img_shape[0])
-    y = np.linspace(min_val - shift_y, max_val - shift_y, img_shape[1])
-    X, Y = np.meshgrid(x, y, indexing='xy')
-    X_b = max_val - np.abs(half - X)
-    Y_b = max_val - np.abs(half - Y)
-    Z = (X_b + Y_b) ** 4
-    real_max = Z.max()
-    Z *= 255 / real_max
-    img = threshold(Z, t)
-    img = threshold_del(img, t)
-    if np.sum(img != 0) > 10:
-        img = morph(img)
+    width, height = img_shape
+    
+    img = np.zeros((height, width), dtype=np.float64)
+    
+    center_x = np.random.uniform(*center_x_range) * width
+    center_y = np.random.uniform(*center_y_range) * height
+    base_radius = np.random.uniform(*radius_range)
+    
+    num_angles = max(24, int(base_radius * 6))
+    radius_variations = np.random.normal(1, irregularity, num_angles)
+    radius_variations = np.clip(radius_variations, 0.6, 1.4)
+    
+    for row in range(height):
+        for col in range(width):
+            dx = col - center_x
+            dy = row - center_y
+            angle = np.arctan2(dy, dx)
+            angle_idx = int((angle / (2 * np.pi) + 1) * num_angles / 2) % num_angles
+            r_at_angle = base_radius * radius_variations[angle_idx]
+            
+            dist = np.sqrt(dx**2 + dy**2)
+            if dist <= r_at_angle:
+                img[row, col] = 255
+    
     img = img.astype(np.uint8)
     return img
 
-#def gen_line(img_shape: tuple, shift: tuple = (0, 0), t: int = 140) -> np.array:
-#    min_val = 0
-#    max_val = 255
-#    half = (max_val - min_val) / 2
-#    step_x = (max_val - min_val) / img_shape[0]
-#    shift_x = shift[0] * step_x
-#    step_y = (max_val - min_val) / img_shape[1]
-#    shift_y = shift[1] * step_y
-#    x = np.linspace(min_val - shift_x, max_val - shift_x, img_shape[0])
-#    y = np.linspace(min_val - shift_y, max_val - shift_y, img_shape[1])
-#    X, Y = np.meshgrid(x, y, indexing='xy')
-#    Y_b = max_val - np.abs(half - Y)
-#    Z = Y_b ** 4
-#    real_max = Z.max()
-#    Z *= 255 / real_max
-#    rnd = random.random()
-#    if rnd > 0.75:
-#        Z = np.vstack([
-#            Z[1: img_shape[1] // 2],
-#            Z[img_shape[1] // 2 + 1:],
-#            Z[img_shape[1] - 1]
-#        ])
-#    elif rnd > 0.5:
-#        Z = np.vstack([
-#            Z[0],
-#            Z[0: img_shape[1] // 2],
-#            Z[img_shape[1] // 2 + 1:]
-#        ])
-#    M = np.ones_like(Z) * 255
-#    n = random.randint(3, 6)
-#    for i in range(n):
-#        step = 255 // n
-#        M[:, i] = i * step
-#        M[:, img_shape[0] - i - 1] = i * step
-#    Z += M
-#    Z **= 4
-#    real_max = Z.max()
-#    Z *= 255 / real_max
-#    img = Z
-#    img = threshold(Z, t)
-#    img = img.astype(np.uint8)
-#    return img
+def morph_line(img: np.array) -> np.array:
+    return closing(img, footprint_rectangle((3, 3)))
 
-def gen_line(img_shape: tuple, shift: tuple = (0, 0), t: int = 140) -> np.array:
-    pass
+def gen_line(
+    img_shape: tuple,
+    side_cut_range: tuple,
+    amplitude_range: tuple = (2, 10),
+    frequency_range: tuple = (0.01, 0.05),
+    thickness: int = 3,
+    noise: float = 0.1,
+    seed: int = None
+) -> np.array:
+    width, height = img_shape
+
+    if seed is not None:
+        np.random.seed(seed)
+    
+    img = np.zeros((height, width), dtype=np.float64)
+    
+    base_y = np.random.uniform(height * 0.4, height * 0.6)
+    amplitude = np.random.uniform(*amplitude_range)
+    frequency = np.random.uniform(*frequency_range)
+    phase = np.random.uniform(0, 2 * np.pi)
+    curve_thickness = np.random.randint(1, thickness + 1)
+    side_cut = np.random.randint(*side_cut_range)
+    
+    x = np.arange(width)
+    y = base_y + amplitude * np.sin(frequency * x + phase)
+    y += np.random.normal(0, noise * amplitude, width)
+    
+    for col in range(side_cut, width - side_cut):
+        row = int(round(y[col]))
+        for t in range(-curve_thickness // 2, curve_thickness // 2 + 1):
+            if 0 <= row + t < height:
+                img[row + t, col] = 255
+    
+    img = img.astype(np.uint8)
+    return img
 
 def main():
-    a = 28
-    shift = (2, 1)
-    img = gen_dot((a, a), shift, 180)
-    draw(img)
+    dots = []
+    lines = []
+    with tqdm(range(2500)) as pbar:
+        for _ in pbar:
+            img = gen_dot(
+                (28, 28),
+                center_x_range=(0.25, 0.75),
+                center_y_range=(0.25, 0.75),
+                radius_range=(1, 4),
+                irregularity=0.10
+            )
+            dots.append(img)
 
-    a = 28
-    shift = (0, 0)
-    img = gen_line((a, a), shift)
-    #print(img)
-    #print(img.min(), img.max())
-    draw(img)
+            img = gen_line(
+                (28, 28),
+                side_cut_range=(2, 5),
+                amplitude_range=(2, 6),
+                frequency_range=(0.01, 0.03),
+                thickness=3,
+                noise=0.1,
+            )
+            img = morph_line(img)
+            lines.append(img)
+    dataset = {
+        'dots': dots,
+        'lines': lines
+    }
+    with lzma.open('morse-dataset.pklz', 'wb') as f:
+        pickle.dump(dataset, f)
 
 
 if __name__ == '__main__':
