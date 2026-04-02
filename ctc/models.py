@@ -25,27 +25,6 @@ def ctc_greedy_decode(logits, blank=2):
         decoded.append(seq)
     return decoded
 
-def pad_batch_images(imgs, pad_value=0):
-    def pad(img, w, h):
-        nonlocal pad_value
-        r = w - img.size(0)
-        b = h - img.size(1)
-        return F.pad(img, (0, r, 0, b), mode='constant', value=pad_value)
-
-    max_w = max(map(lambda img: img.size(0) * img.size(2), imgs))
-    max_h = max(map(lambda img: img.size(1), imgs))
-    return torch.stack([pad(img, max_w, max_h) for img in imgs])
-
-
-def collate(batch):
-    imgs = [b[0] for b in batch]
-    targets = [b[1] for b in batch]
-    lengths = [b[2] for b in batch]
-    images_padded = pad_batch_images(imgs, pad_value=0)
-    targets = torch.stack(targets).long()
-    lenghts = torch.stack(lengths).long()
-    return images_padded, targets, lenghts
-
 #def levenshtein(a, b):
 #    m, n = len(a), len(b)
 #    dp = list(range(n+1))
@@ -68,6 +47,7 @@ class CTCModel(nn.Module):
         self.device = device
 
     def forward(self, x):
+        x = x.unsqueeze(1)
         b, c, h, w = x.size()
         convoluted = self.backbone(x)
         _, c2, h2, w2 = convoluted.size()
@@ -140,25 +120,31 @@ class CTCModel(nn.Module):
             'loss': self.test_loss.compute().item()
         }
 
+    @torch.no_grad()
+    def predict(self, image):
+        self.eval()
+        image = image.to(self.device)
+        return self(image)
+
 
 def crnn_ctc_model(learning_rate: float, weight_decay: float):
-    backbone = nn.ModuleList((
-        nn.Conv2d(1, 64, 3, 1, 1),
+    backbone = nn.Sequential(
+        nn.Conv2d(1, 32, 3, 1, 1),
         nn.ReLU(),
         nn.BatchNorm2d(32),
-        nn.Conv2d(64, 128, 3, 1, 1),
+        nn.Conv2d(32, 64, 3, 1, 1),
         nn.ReLU(),
-        nn.BatchNorm2d(32),
+        nn.BatchNorm2d(64),
         nn.MaxPool2d(2, 2),
-        nn.Conv2d(128, 256, 3, 1, 1),
-    ))
-    model = CTCModel(DEVICE, 3, backbone, 256, 256, 2)
+        nn.Conv2d(64, 128, 3, 1, 1)
+    )
+    model = CTCModel(DEVICE, 3, backbone, 1792, 256, 2)
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=150, eta_min=0)
     model.configure(
         optimizer,
         scheduler,
-        nn.CTCLoss(blank=2, reduction='mean'),
+        nn.CTCLoss(blank=2, reduction='mean', zero_infinity=True),
         { 
             'loss': MeanMetric('error', dist_sync_on_step=False),
         }
