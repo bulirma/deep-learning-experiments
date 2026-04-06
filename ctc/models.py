@@ -2,39 +2,13 @@ import torch
 from torch import nn, optim
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
-from torchmetrics import Accuracy, MeanMetric
+from torchmetrics import MeanMetric
 from tqdm import tqdm
-
-from typing import Iterable
 
 from traineval import DEVICE
 
 
-def ctc_greedy_decode(logits, blank=2):
-    predictions = logits.argmax(dim=2)
-    print(predictions)
-    T, B = predictions.shape
-    decoded = []
-    for b in range(B):
-        prev = blank
-        seq = []
-        for t in range(T):
-            p = int(predictions[t, b].item())
-            if p != prev and p != blank:
-                seq.append(p)
-            prev = p
-        decoded.append(seq)
-    return decoded
-
-#def levenshtein(a, b):
-#    m, n = len(a), len(b)
-#    dp = list(range(n+1))
-#    for i in range(1, m + 1):
-#        prev, dp[0] = dp[0], i
-#        for j in range(1, n + 1):
-#            cur = min(dp[j] + 1, dp[j - 1] + 1, prev + (0 if a[i - 1] == b[j - 1] else 1))
-#            prev, dp[j] = dp[j], cur
-#    return dp[n]
+#def ctc_greedy_decode(logits, blank=2):
 
 
 class CTCModel(nn.Module):
@@ -48,7 +22,6 @@ class CTCModel(nn.Module):
         self.device = device
 
     def forward(self, x):
-        x = x.unsqueeze(1)
         b, c, h, w = x.size()
         convoluted = self.backbone(x)
         _, c2, h2, w2 = convoluted.size()
@@ -83,7 +56,8 @@ class CTCModel(nn.Module):
                     self.optimizer.zero_grad()
                     logits = self(images)
                     log_probs = F.log_softmax(logits, dim=2)
-                    loss = self.loss(log_probs, targets, lengths, lengths)
+                    in_lengths = torch.full((logits.size(1),), logits.size(0), dtype=torch.long)
+                    loss = self.loss(log_probs, targets, in_lengths, lengths)
                     loss.backward()
                     self.optimizer.step()
                     if not isinstance(self.scheduler, optim.lr_scheduler.ReduceLROnPlateau):
@@ -136,10 +110,14 @@ def crnn_ctc_model(learning_rate: float, weight_decay: float):
         nn.Conv2d(32, 64, 3, 1, 1),
         nn.ReLU(),
         nn.BatchNorm2d(64),
-        nn.MaxPool2d(2, 2),
-        nn.Conv2d(64, 128, 3, 1, 1)
+        nn.MaxPool2d(1, 2),
+        nn.Conv2d(64, 128, 3, 1, 1),
+        nn.ReLU(),
+        nn.BatchNorm2d(128),
+        nn.MaxPool2d(1, 2),
+        nn.AdaptiveAvgPool2d((1, None))
     )
-    model = CTCModel(DEVICE, 3, backbone, 1792, 256, 2)
+    model = CTCModel(DEVICE, 3, backbone, 128, 256, 2)
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=150, eta_min=0)
     model.configure(

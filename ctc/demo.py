@@ -2,18 +2,15 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pygame
 import torch
-from torchvision.datasets import EMNIST
-import torchvision.transforms.v2 as transforms
 
 import argparse
 import os
-import random
 import sys
 
 import models
 from models import CTCModel
 from traineval import DEVICE
-from dataset import SimpleDataset, load_morse_symbol_dataset, load_morse_sequence_dataset
+from dataset import load_morse_symbol_dataset, load_morse_sequence_dataset
 
 
 argparser = argparse.ArgumentParser()
@@ -140,7 +137,7 @@ def predict(model_path: str):
     weight_decay = 1e-4
     model = models.crnn_ctc_model(learning_rate, weight_decay)
     model.load_state_dict(model_state)
-    classes = '.-'
+    #classes = '.-'
 
     running = True
     while running:
@@ -162,10 +159,7 @@ def predict(model_path: str):
                     image = image.T
                     image = image.unsqueeze(0)
                     prediction = model.predict(image)
-                    print('---')
-                    decoded = models.ctc_greedy_decode(prediction)
-                    print(decoded)
-                    print('---')
+                    print(prediction)
                     #print(''.join(classes[ci] for ci in decoded[0]))
                 elif key == '1':
                     canvas.set_point_stroke()
