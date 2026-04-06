@@ -8,10 +8,8 @@ from tqdm import tqdm
 
 import argparse
 from datetime import datetime
-from functools import reduce
 import lzma
 import pickle
-import random
 import os
 import sys
 
@@ -22,8 +20,8 @@ argparser.add_argument('--dataset', type=str, default='sequence', help='data to 
 argparser.add_argument('--min_len', type=int, default=1, help='minimal sequence length (used with sequence dataset, default: 1)')
 argparser.add_argument('--max_len', type=int, default=20, help='maximal sequence length (used with sequence dataset, default: 20)')
 argparser.add_argument('--seq_size', type=int, default=None, help='sequence dataset size')
-argparser.add_argument('--dots_size', type=int, default=None, help='number of dots in symbols dataset')
-argparser.add_argument('--lines_size', type=int, default=None, help='number of lines in symbols dataset')
+argparser.add_argument('--dot_size', type=int, default=None, help='number of dots in symbols dataset')
+argparser.add_argument('--line_size', type=int, default=None, help='number of lines in symbols dataset')
 argparser.add_argument('--use_dataset', type=str, default=None, help='symbols dataset to generate sequence database')
 
 
@@ -72,11 +70,17 @@ def uniform_merge(a: list, b: list) -> list:
         i += 1
     return r
 
-def load_morse_symbol_dataset(filename: str, split: int = 0):
+def load_morse_symbol_dataset(filename: str, split: int = 0, transform=None):
+    def convert(img):
+        img = torch.from_numpy(img).unsqueeze(0).float() / 255
+        if transform is not None:
+            img = transform(img)
+        return img
+
     with lzma.open(filename, 'rb') as f:
         data = pickle.load(f)
-    dots = [torch.from_numpy(img) for img in data['dots']]
-    lines = [torch.from_numpy(img) for img in data['lines']]
+    dots = [convert(img) for img in data['dots']]
+    lines = [convert(img) for img in data['lines']]
     ld = len(dots)
     ll = len(lines)
     if split < 0:
@@ -96,10 +100,16 @@ def load_morse_symbol_dataset(filename: str, split: int = 0):
     return SimpleDataset(left_data, left_targets), SimpleDataset(right_data, right_targets)
 
 
-def load_morse_sequence_dataset(filename: str, split: int = 0):
+def load_morse_sequence_dataset(filename: str, split: int = 0, transform=None):
+    def convert(img):
+        img = torch.from_numpy(img).unsqueeze(0).float() / 255
+        if transform is not None:
+            img = transform(img)
+        return img
+
     with lzma.open(filename, 'rb') as f:
         data = pickle.load(f)
-    seqs = [torch.from_numpy(img) for img in data['seqs']]
+    seqs = [convert(img) for img in data['seqs']]
     labels = [torch.tensor(label, dtype=torch.uint8) for label in data['labels']]
     count = len(seqs)
     if split < 0:
@@ -140,12 +150,8 @@ def gen_dot(
     center_y_range: tuple = (0.2, 0.8),
     radius_range: tuple = (5, 15),
     irregularity: float = 0.15,
-    num_blobs: int = 1,
-    seed: int = None
+    num_blobs: int = 1
 ) -> np.array:
-    if seed is not None:
-        np.random.seed(seed)
-
     width, height = img_shape
     
     img = np.zeros((height, width), dtype=np.float64)
@@ -182,13 +188,9 @@ def gen_line(
     amplitude_range: tuple = (2, 10),
     frequency_range: tuple = (0.01, 0.05),
     thickness: int = 3,
-    noise: float = 0.1,
-    seed: int = None
+    noise: float = 0.1
 ) -> np.array:
     width, height = img_shape
-
-    if seed is not None:
-        np.random.seed(seed)
     
     img = np.zeros((height, width), dtype=np.float64)
     
@@ -212,7 +214,42 @@ def gen_line(
     img = img.astype(np.uint8)
     return img
 
-def gen_dots_and_lines(num_dots: int, num_lines: int, seed: int) -> (list, list):
+def get_spaces(img: np.array) -> list:
+    spaces = []
+    start = 0
+    end = 0
+    while True:
+        c = end if start < end else start
+        if c >= img.shape[1]:
+            break
+        space_column = np.all(img[:, c] == 0)
+        if space_column:
+            if start < end:
+                end += 1
+            else:
+                end = start + 1
+        else:
+            if start < end:
+                spaces.append((start, end))
+                start = end + 1
+            else:
+                start += 1
+    if start < end:
+        spaces.append((start, end))
+    return spaces
+
+def cut_sides(img: np.array) -> np.array:
+    preserve_cols = np.array([True] * img.shape[1])
+    spaces = get_spaces(img)
+    spaces = (spaces[0], spaces[-1]) if len(spaces) > 1 else spaces
+    for start, end in spaces:
+        cols = end - start
+        offset = np.random.randint(cols // 2, cols)
+        remove_cols = np.arange(start, start + offset)
+        preserve_cols[remove_cols] = False
+    return img[:, preserve_cols]
+
+def gen_dots_and_lines(num_dots: int, num_lines: int) -> (list, list):
     dots = []
     lines = []
     with tqdm(range(num_dots + num_lines)) as pbar:
@@ -223,8 +260,7 @@ def gen_dots_and_lines(num_dots: int, num_lines: int, seed: int) -> (list, list)
                     center_x_range=(0.25, 0.75),
                     center_y_range=(0.25, 0.75),
                     radius_range=(1, 3),
-                    irregularity=0.10,
-                    seed=seed
+                    irregularity=0.10
                 )
                 dots.append(img)
             else:
@@ -234,25 +270,21 @@ def gen_dots_and_lines(num_dots: int, num_lines: int, seed: int) -> (list, list)
                     amplitude_range=(2, 6),
                     frequency_range=(0.01, 0.03),
                     thickness=3,
-                    noise=0.1,
-                    seed=seed
+                    noise=0.1
                 )
                 img = morph_line(img)
                 lines.append(img)
     return dots, lines
 
-def create_symbol_dataset(dots: int, lines: int, seed: int) -> dict:
-    dots, lines = gen_dots_and_lines(dots, lines, seed)
+def create_symbol_dataset(dots: int, lines: int) -> dict:
+    dots, lines = gen_dots_and_lines(dots, lines)
     dataset = {
         'dots': dots,
         'lines': lines
     }
     return dataset
 
-def create_sequence_dataset(symbol_dataset: dict, size: int, min_seq_len: int, max_seq_len: int, seed: int = None):
-    if seed is not None:
-        np.random.seed(seed)
-
+def create_sequence_dataset(symbol_dataset: dict, size: int, min_seq_len: int, max_seq_len: int):
     dots_len = len(symbol_dataset['dots'])
 
     def get_label(idx: int) -> int:
@@ -269,8 +301,12 @@ def create_sequence_dataset(symbol_dataset: dict, size: int, min_seq_len: int, m
     with tqdm(range(size)) as pbar:
         for _ in pbar:
             seq_idxs = np.random.choice(idxs, size=np.random.randint(min_seq_len, max_seq_len), replace=True)
-            seq = np.hstack(symbols[seq_idxs])
+            seq_symbols = symbols[seq_idxs]
             label = [get_label(idx) for idx in seq_idxs]
+            cut_seq_symbols = []
+            for i in range(len(label)):
+                cut_seq_symbols.append(seq_symbols[i] if label[i] == 1 else cut_sides(seq_symbols[i]))
+            seq = np.hstack(cut_seq_symbols)
             seqs.append(seq)
             labels.append(label)
 
@@ -281,18 +317,21 @@ def create_sequence_dataset(symbol_dataset: dict, size: int, min_seq_len: int, m
     return dataset
 
 def main(args: argparse.Namespace):
+    if args.seed is not None:
+        np.random.seed(args.seed)
+
     if args.dataset == 'symbols' or (args.dataset == 'sequence' and args.use_dataset is None):
-        if args.dots_size is not None and args.lines_size is not None:
-            dots_size = args.dots_size
-            lines_size = args.lines_size
-        elif args.dots_size is not None:
-            dots_size = args.dots_size
-            lines_size = args.dots_size
-        elif args.lines_size is not None:
-            dots_size = args.lines_size
-            lines_size = args.lines_size
+        if args.dot_size is not None and args.line_size is not None:
+            dot_size = args.dot_size
+            line_size = args.line_size
+        elif args.dot_size is not None:
+            dot_size = args.dot_size
+            line_size = args.dot_size
+        elif args.line_size is not None:
+            dot_size = args.line_size
+            line_size = args.line_size
         else:
-            print('at least one of the arguemnts need to be specified: dots_size, lines_size', file=sys.stderr)
+            print('at least one of the arguemnts need to be specified: dot_size, line_size', file=sys.stderr)
             exit(1)
     elif args.dataset == 'sequence':
         if args.seq_size is None:
@@ -303,16 +342,16 @@ def main(args: argparse.Namespace):
             exit(1)
 
     if args.dataset == 'symbols':
-        size_name_part = f'd{dots_size}l{lines_size}'
-        dataset = create_symbol_dataset(dots_size, lines_size, seed=args.seed)
+        size_name_part = f'd{dot_size}l{line_size}'
+        dataset = create_symbol_dataset(dot_size, line_size)
     elif args.dataset == 'sequence':
         size_name_part = f'n{args.seq_size}'
         if args.use_dataset is None:
-            symbols = create_symbol_dataset(dots_size, lines_size, seed=args.seed)
+            symbols = create_symbol_dataset(dot_size, line_size)
         else:
             with lzma.open(args.use_dataset, 'rb') as f:
                 symbols = pickle.load(f)
-        dataset = create_sequence_dataset(symbols, args.seq_size, args.min_len, args.max_len, seed=args.seed)
+        dataset = create_sequence_dataset(symbols, args.seq_size, args.min_len, args.max_len)
     else:
         print('unknown dataset', file=sys.stderr)
         exit(1)

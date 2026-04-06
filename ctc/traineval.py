@@ -1,14 +1,13 @@
-from matplotlib import pyplot as plt
-import numpy as np
 import torch
 from torch.utils.data import DataLoader
+#import torchvision.transforms.v2 as transforms
 
 import argparse
 from datetime import datetime
 import os
 import sys
 
-#from datasets import MorseDataset, MorseSequenceDataset, collate
+from dataset import load_morse_sequence_dataset, collate
 import models
 
 
@@ -26,27 +25,24 @@ def main(args: argparse.Namespace):
     weight_decay = 1e-4
     epochs = 15
 
-    #dataset = MorseDataset.from_file('morse-dataset.pklz', True)
-    #train, test = dataset.split(int(len(dataset) * 0.8))
-    #train = MorseSequenceDataset(train, 8000, 1, 20, args.seed)
-    #test = MorseSequenceDataset(test, 2000, 1, 20, args.seed)
-    #train_loader = DataLoader(train, batch_size=batch_size, shuffle=True, collate_fn=collate)
-    #test_loader = DataLoader(test, batch_size=batch_size, shuffle=False, collate_fn=collate)
+    train, test = load_morse_sequence_dataset('sequence_n80000d06195552.pklz', split=20000)
+    train_loader = DataLoader(train, batch_size=batch_size, shuffle=True, collate_fn=collate)
+    test_loader = DataLoader(test, batch_size=batch_size, shuffle=False, collate_fn=collate)
 
-    #model = models.crnn_ctc_model(learning_rate, weight_decay)
-    #logs = model.fit(epochs, train_loader)
-    #result = model.evaluate(test_loader)
+    model = models.crnn_ctc_model(learning_rate, weight_decay)
+    logs = model.fit(epochs, train_loader)
+    result = model.evaluate(test_loader)
 
-    #model_record = {
-    #    'model_state_dict': model.state_dict(),
-    #    'train_logs': logs,
-    #    'evaluation': result
-    #}
-    #model_dir = os.path.join(os.path.dirname(__file__), args.model_dir)
-    #os.makedirs(model_dir, exist_ok=True)
-    #time = datetime.now().strftime('%d%H%M%S')
-    #model_fn = os.path.join(model_dir, f'{time}.model')
-    #torch.save(model_record, model_fn)
+    model_record = {
+        'model_state_dict': model.state_dict(),
+        'train_logs': logs,
+        'evaluation': result
+    }
+    model_dir = os.path.join(os.path.dirname(__file__), args.model_dir)
+    os.makedirs(model_dir, exist_ok=True)
+    time = datetime.now().strftime('%d%H%M%S')
+    model_fn = os.path.join(model_dir, f'{time}.model')
+    torch.save(model_record, model_fn)
 
 
 if __name__ == '__main__':
