@@ -1,0 +1,9 @@
+numpy
+opencv-python-headless
+pygame-ce
+scikit-image
+scikit-learn
+torch
+torchmetrics
+torchvision
+tqdm

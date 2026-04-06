@@ -12,6 +12,7 @@ from traineval import DEVICE
 
 def ctc_greedy_decode(logits, blank=2):
     predictions = logits.argmax(dim=2)
+    print(predictions)
     T, B = predictions.shape
     decoded = []
     for b in range(B):

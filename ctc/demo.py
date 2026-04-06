@@ -1,15 +1,24 @@
-import random
-import sys
-
 from matplotlib import pyplot as plt
+import numpy as np
 import pygame
 import torch
 from torchvision.datasets import EMNIST
 import torchvision.transforms.v2 as transforms
 
+import argparse
+import os
+import random
+import sys
+
 import models
 from models import CTCModel
 from traineval import DEVICE
+from dataset import SimpleDataset, load_morse_symbol_dataset, load_morse_sequence_dataset
+
+
+argparser = argparse.ArgumentParser()
+argparser.add_argument('--predict', type=str, default=None, help='model')
+argparser.add_argument('--show_dataset', type=str, default=None, help='dataset')
 
 
 class Canvas:
@@ -102,7 +111,15 @@ class Canvas:
         self._stroke = self._erase_stroke
 
 
-def main():
+def plt_show(img: np.array, title: str = None):
+    plt.imshow(img, cmap='gray')
+    if title is not None:
+        plt.title(title)
+    plt.axis('off')
+    plt.tight_layout()
+    plt.show()
+
+def predict(model_path: str):
     GRID_W = 140
     GRID_H = 28
     GRID_C = 8
@@ -117,7 +134,7 @@ def main():
     clock = pygame.time.Clock()
 
     canvas = Canvas(screen, GRID_LM, GRID_TM, GRID_C, GRID_W, GRID_H)
-    model_record = torch.load('models/02052910.model', map_location=torch.device(DEVICE))
+    model_record = torch.load(model_path, map_location=torch.device(DEVICE))
     model_state = model_record['model_state_dict']
     learning_rate = 0.001
     weight_decay = 1e-4
@@ -142,10 +159,14 @@ def main():
                 elif key == 'p':
                     image = (255 - canvas.image)
                     image = image.float() / 255.0
+                    image = image.T
                     image = image.unsqueeze(0)
                     prediction = model.predict(image)
+                    print('---')
                     decoded = models.ctc_greedy_decode(prediction)
-                    print(''.join(classes[ci] for ci in decoded))
+                    print(decoded)
+                    print('---')
+                    #print(''.join(classes[ci] for ci in decoded[0]))
                 elif key == '1':
                     canvas.set_point_stroke()
                 elif key == '2':
@@ -162,19 +183,39 @@ def main():
 
     pygame.quit()
 
-def show_results():
-    model_record = torch.load('models/02052910.model', map_location=torch.device(DEVICE))
-    #model_state = model_record['model_state_dict']
-    #learning_rate = 0.001
-    #weight_decay = 1e-4
-    #model = models.crnn_ctc_model(learning_rate, weight_decay)
-    #model.load_state_dict(model_state)
-    logs = model_record['train_logs']
-    evaluation = model_record['evaluation']
-    print(logs)
-    print(evaluation)
+#def show_results():
+#    model_record = torch.load('models/02052910.model', map_location=torch.device(DEVICE))
+#    #model_state = model_record['model_state_dict']
+#    #learning_rate = 0.001
+#    #weight_decay = 1e-4
+#    #model = models.crnn_ctc_model(learning_rate, weight_decay)
+#    #model.load_state_dict(model_state)
+#    logs = model_record['train_logs']
+#    evaluation = model_record['evaluation']
+#    print(logs)
+#    print(evaluation)
+
+def show_dataset(dataset_fn: str):
+    if dataset_fn.startswith('symbols'):
+        dataset = load_morse_symbol_dataset(dataset_fn)
+    else:
+        dataset = load_morse_sequence_dataset(dataset_fn)
+    for i in range(30):
+        img, label = dataset[i]
+        plt_show(img, str(label))
+
+def main(args: argparse.Namespace):
+    if args.predict is not None:
+        if not os.path.exists(args.predict):
+            print('model file does not exist', file=sys.stderr)
+            exit(1)
+        predict(args.predict)
+    if args.show_dataset is not None:
+        if not os.path.exists(args.show_dataset):
+            print('dataset file does not exist', file=sys.stderr)
+            exit(1)
+        show_dataset(args.show_dataset)
 
 
 if __name__ == '__main__':
-    main()
-    #show_results()
+    main(argparser.parse_args(sys.argv[1:]))
