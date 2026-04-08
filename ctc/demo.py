@@ -4,11 +4,11 @@ import pygame
 import torch
 
 import argparse
+import datetime
 import os
 import sys
 
 import models
-from models import CTCModel
 from traineval import DEVICE
 from dataset import load_morse_symbol_dataset, load_morse_sequence_dataset
 
@@ -16,6 +16,9 @@ from dataset import load_morse_symbol_dataset, load_morse_sequence_dataset
 argparser = argparse.ArgumentParser()
 argparser.add_argument('--predict', type=str, default=None, help='model')
 argparser.add_argument('--show_dataset', type=str, default=None, help='dataset')
+argparser.add_argument('--show_model', type=str, default=None, help='model')
+
+torch.serialization.add_safe_globals([datetime.timedelta])
 
 
 class Canvas:
@@ -131,13 +134,13 @@ def predict(model_path: str):
     clock = pygame.time.Clock()
 
     canvas = Canvas(screen, GRID_LM, GRID_TM, GRID_C, GRID_W, GRID_H)
-    model_record = torch.load(model_path, map_location=torch.device(DEVICE))
+    model_record = torch.load(model_path, map_location=torch.device(DEVICE), weights_only=False)
     model_state = model_record['model_state_dict']
     learning_rate = 0.001
     weight_decay = 1e-4
     model = models.crnn_ctc_model(learning_rate, weight_decay)
     model.load_state_dict(model_state)
-    #classes = '.-'
+    classes = '.-'
 
     running = True
     while running:
@@ -157,10 +160,10 @@ def predict(model_path: str):
                     image = (255 - canvas.image)
                     image = image.float() / 255.0
                     image = image.T
-                    image = image.unsqueeze(0)
+                    image = image.unsqueeze(0).unsqueeze(0)
                     prediction = model.predict(image)
-                    print(prediction)
-                    #print(''.join(classes[ci] for ci in decoded[0]))
+                    decoded = models.ctc_greedy_decode(prediction.squeeze(1))
+                    print(''.join(classes[ci] for ci in decoded))
                 elif key == '1':
                     canvas.set_point_stroke()
                 elif key == '2':
@@ -189,14 +192,23 @@ def predict(model_path: str):
 #    print(logs)
 #    print(evaluation)
 
-def show_dataset(dataset_fn: str):
-    if dataset_fn.startswith('symbols'):
-        dataset = load_morse_symbol_dataset(dataset_fn)
+def show_dataset(dataset_path: str):
+    if dataset_path.startswith('symbols'):
+        dataset = load_morse_symbol_dataset(dataset_path)
     else:
-        dataset = load_morse_sequence_dataset(dataset_fn)
+        dataset = load_morse_sequence_dataset(dataset_path)
     for i in range(30):
         img, label = dataset[i]
         plt_show(img, str(label))
+
+def show_model(model_path: str):
+    model_record = torch.load(model_path, map_location=torch.device(DEVICE), weights_only=False)
+    logs = model_record['train_logs']
+    time = model_record['training_time']
+    result = model_record['evaluation_result']
+    print(logs)
+    print(result)
+    print(time)
 
 def main(args: argparse.Namespace):
     if args.predict is not None:
@@ -204,6 +216,11 @@ def main(args: argparse.Namespace):
             print('model file does not exist', file=sys.stderr)
             exit(1)
         predict(args.predict)
+    if args.show_model is not None:
+        if not os.path.exists(args.show_model):
+            print('model file does not exist', file=sys.stderr)
+            exit(1)
+        show_model(args.show_model)
     if args.show_dataset is not None:
         if not os.path.exists(args.show_dataset):
             print('dataset file does not exist', file=sys.stderr)

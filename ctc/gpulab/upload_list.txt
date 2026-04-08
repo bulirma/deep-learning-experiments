@@ -1,5 +1,5 @@
 gpulab/requirements.txt
-gpulab/slurm_job.sh
+gpulab/job_te.sh
 dataset.py
 models.py
 traineval.py

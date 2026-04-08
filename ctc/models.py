@@ -75,6 +75,8 @@ class CTCModel(nn.Module):
             }
             logs.append(log)
 
+        return logs
+
     @torch.no_grad()
     def evaluate(self, test_loader):
         self.eval()
@@ -102,6 +104,14 @@ class CTCModel(nn.Module):
         image = image.to(self.device)
         return self(image)
 
+
+def ctc_greedy_decode(logits: torch.Tensor):
+    symbols = torch.argmax(logits, dim=1)
+    collapsed = [symbols[0]]
+    for symbol in symbols[1:]:
+        if symbol != collapsed[-1]:
+            collapsed.append(symbol)
+    return [symbol.item() for symbol in collapsed if symbol != 2]
 
 def crnn_ctc_model(learning_rate: float, weight_decay: float):
     backbone = nn.Sequential(

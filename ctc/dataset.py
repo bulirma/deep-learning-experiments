@@ -70,7 +70,7 @@ def uniform_merge(a: list, b: list) -> list:
         i += 1
     return r
 
-def load_morse_symbol_dataset(filename: str, split: int = 0, transform=None):
+def load_morse_symbol_dataset(filename: str, split_ratio: float = 0, transform=None):
     def convert(img):
         img = torch.from_numpy(img).unsqueeze(0).float() / 255
         if transform is not None:
@@ -83,16 +83,15 @@ def load_morse_symbol_dataset(filename: str, split: int = 0, transform=None):
     lines = [convert(img) for img in data['lines']]
     ld = len(dots)
     ll = len(lines)
-    if split < 0:
-        raise ValueError('split must be non-negative')
-    if split > ld + ll:
-        raise ValueError('split is greater than dataset size')
+    if split_ratio < 0 or split_ratio > 1:
+        raise ValueError('split_ratio must be in range [0, 1]')
     dot_targets = [0] * ld
     line_targets = [1] * ll
     data = uniform_merge(dots, lines)
     targets = uniform_merge(dot_targets, line_targets)
-    if split == 0:
+    if split_ratio == 0:
         return SimpleDataset(data, targets)
+    split = int(split_ratio * len(data))
     left_data = data[: -split]
     left_targets = targets[: -split]
     right_data = data[len(data) - split:]
@@ -100,7 +99,7 @@ def load_morse_symbol_dataset(filename: str, split: int = 0, transform=None):
     return SimpleDataset(left_data, left_targets), SimpleDataset(right_data, right_targets)
 
 
-def load_morse_sequence_dataset(filename: str, split: int = 0, transform=None):
+def load_morse_sequence_dataset(filename: str, split_ratio: float = 0, transform=None):
     def convert(img):
         img = torch.from_numpy(img).unsqueeze(0).float() / 255
         if transform is not None:
@@ -112,12 +111,12 @@ def load_morse_sequence_dataset(filename: str, split: int = 0, transform=None):
     seqs = [convert(img) for img in data['seqs']]
     labels = [torch.tensor(label, dtype=torch.uint8) for label in data['labels']]
     count = len(seqs)
-    if split < 0:
-        raise ValueError('split must be non-negative')
-    if split > count:
-        raise ValueError('split is greater than dataset size')
-    if split == 0:
+    if split_ratio < 0 or split_ratio > 1:
+        raise ValueError('split_ratio must be in range [0, 1]')
+    if split_ratio == 0:
         return SimpleDataset(seqs, labels)
+    split = int(split_ratio * count)
+    print(split)
     left_data = seqs[: -split]
     left_targets = labels[: -split]
     right_data = seqs[len(seqs) - split:]

@@ -1,6 +1,6 @@
 #!/bin/sh
-#SBATCH --time=12:00:00
-#SBATCH --job-name=ctc_morse_traineval
+#SBATCH --time=01:00:00
+#SBATCH --job-name=morse-seq-ctc
 #SBATCH --partition=gpu-ffa
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=16G
@@ -20,13 +20,13 @@ cd "$WORK_DIR" || exit 1
 
 . "${DATA_DIR}/venv/bin/activate"
 
-python traineval.py
+python traineval.py --dataset morse-sequence.pklz
 
 EXIT=$?
 
 deactivate
 
-cp -r "$WORK_DIR/models" "${DATA_DIR}/"
+cp -r "$WORK_DIR/dev-models" "${DATA_DIR}/"
 rm -rf "$WORK_DIR"
 
 exit $EXIT
