@@ -87,7 +87,8 @@ class CTCModel(nn.Module):
 
             logits = self(images)
             log_probs = F.log_softmax(logits, dim=2)
-            loss = self.loss(log_probs, targets, lengths, lengths)
+            in_lengths = torch.full((logits.size(1),), logits.size(0), dtype=torch.long)
+            loss = self.loss(log_probs, targets, in_lengths, lengths)
             
             self.test_loss.update(loss)
 

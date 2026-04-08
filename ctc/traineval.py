@@ -7,12 +7,12 @@ from datetime import datetime
 import os
 import sys
 
-from dataset import load_morse_sequence_dataset, collate
+from dataset import load_morse_sequence_dataset, collate, SimpleDataset
 import models
 
 
 argparser = argparse.ArgumentParser()
-argparser.add_argument('--model_dir', default='models', type=str, help='directory to save models')
+argparser.add_argument('--model_dir', default='dev-models', type=str, help='directory to save models')
 argparser.add_argument('--seed', default=42, type=int, help='randomization seed')
 
 
@@ -25,18 +25,20 @@ def main(args: argparse.Namespace):
     weight_decay = 1e-4
     epochs = 15
 
-    train, test = load_morse_sequence_dataset('sequence_n80000d06195552.pklz', split=20000)
+    train, test = load_morse_sequence_dataset('morse-sequence.pklz', split=20000)
     train_loader = DataLoader(train, batch_size=batch_size, shuffle=True, collate_fn=collate)
-    test_loader = DataLoader(test, batch_size=batch_size, shuffle=False, collate_fn=collate)
+    #test_loader = DataLoader(test, batch_size=batch_size, shuffle=False, collate_fn=collate)
 
     model = models.crnn_ctc_model(learning_rate, weight_decay)
+
+    train_begin = datetime.now()
     logs = model.fit(epochs, train_loader)
-    result = model.evaluate(test_loader)
+    train_end = datetime.now()
 
     model_record = {
         'model_state_dict': model.state_dict(),
         'train_logs': logs,
-        'evaluation': result
+        'training_time': train_end - train_begin
     }
     model_dir = os.path.join(os.path.dirname(__file__), args.model_dir)
     os.makedirs(model_dir, exist_ok=True)

@@ -1,10 +1,10 @@
 #!/bin/sh
-#SBATCH --time=08:00:00
+#SBATCH --time=2:00:00
 #SBATCH --job-name=ctc_morse_traineval
 #SBATCH --partition=gpu-ffa
-#SBATCH --cpus-per-task=2
-#SBATCH --mem=32G
-#SBATCH --gres=gpu:V100:2
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=16G
+#SBATCH --gres=gpu:V100:1
 #SBATCH --output=stdout.txt
 #SBATCH --error=stderr.txt
 
@@ -13,8 +13,8 @@ WORK_DIR="$TMPDIR"
 
 cp "${DATA_DIR}/traineval.py" "$WORK_DIR/"
 cp "${DATA_DIR}/models.py" "$WORK_DIR/"
-cp "${DATA_DIR}/datasets.py" "$WORK_DIR/"
-cp "${DATA_DIR}/morse-dataset.pklz" "$WORK_DIR/"
+cp "${DATA_DIR}/dataset.py" "$WORK_DIR/"
+cp "${DATA_DIR}/morse-sequence.pklz" "$WORK_DIR/"
 
 cd "$WORK_DIR" || exit 1
 

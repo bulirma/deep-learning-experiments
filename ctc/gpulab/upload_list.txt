@@ -1,5 +1,6 @@
-gpulab/train-requirements.txt
+gpulab/requirements.txt
 gpulab/slurm_job.sh
 dataset.py
 models.py
 traineval.py
+morse-sequence.pklz
